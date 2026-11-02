@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Conciliador Náutica</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">N</div>
+      <div>
+        <div class="brand-name">Conciliador</div>
+        <div class="brand-sub">Náutica · Farma</div>
+      </div>
+    </div>
+    <nav>
+      <a href="#panel" data-view="panel"><span>◉</span> Panel</a>
+      <a href="#conciliar" data-view="conciliar"><span>⇅</span> Conciliar extracto</a>
+      <a href="#historial" data-view="historial"><span>☰</span> Historial</a>
+      <a href="#ajustes" data-view="ajustes"><span>⚙</span> Ajustes</a>
+    </nav>
+    <div class="sidebar-foot" id="foot-status">…</div>
+  </aside>
+
+  <main>
+    <!-- ================= PANEL ================= -->
+    <section class="view" id="view-panel">
+      <header class="view-head">
+        <div>
+          <h1>Panel de control</h1>
+          <p class="muted">Estado de las conexiones y últimas cargas a Odoo.</p>
+        </div>
+        <a class="btn primary" href="#conciliar">⇅ Conciliar un extracto</a>
+      </header>
+      <div class="grid cards" id="status-cards"></div>
+      <div class="grid two">
+        <div class="card">
+          <h3>Cuentas bancarias</h3>
+          <div id="panel-cuentas"></div>
+        </div>
+        <div class="card">
+          <h3>Actividad reciente</h3>
+          <div id="panel-historial"></div>
+        </div>
+      </div>
+      <div class="card rules-card">
+        <h3>Reglas activas</h3>
+        <ul class="rules">
+          <li><b>Un extracto por día.</b> Cada fecha del banco genera su propio archivo y su propio extracto en Odoo.</li>
+          <li><b>El día en curso no se sube.</b> Los movimientos de hoy (o fechados a un día hábil futuro) esperan a que ese día cierre.</li>
+          <li><b>Fines de semana:</b> Banesco y Mercantil fechan sábado y domingo con el lunes; se suben el martes junto con el lunes.</li>
+          <li><b>Comisiones</b> → Etiqueta <code id="regla-etiqueta">COMISIÓN BANCARIA</code> para la conciliación automática de Odoo.</li>
+          <li><b>Sin duplicados:</b> antes de cargar se revisa el historial y las líneas que ya existen en el diario de Odoo.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ================= CONCILIAR ================= -->
+    <section class="view" id="view-conciliar">
+      <header class="view-head">
+        <div>
+          <h1>Conciliar extracto</h1>
+          <p class="muted">Sube el estado de cuenta descargado del banco (Excel .xlsx, CSV o TXT).</p>
+        </div>
+      </header>
+      <div class="card">
+        <div class="row gap">
+          <label class="field grow">
+            <span>Cuenta bancaria</span>
+            <select id="sel-cuenta"></select>
+          </label>
+        </div>
+        <label class="drop" id="drop">
+          <input type="file" id="file" accept=".xlsx,.csv,.txt" hidden />
+          <div class="drop-icon">⇪</div>
+          <div><b>Arrastra el estado de cuenta aquí</b> o haz clic para elegirlo</div>
+          <div class="muted small">.xlsx · .csv · .txt · máx. 20 MB</div>
+        </label>
+      </div>
+      <div id="resultado"></div>
+    </section>
+
+    <!-- ================= HISTORIAL ================= -->
+    <section class="view" id="view-historial">
+      <header class="view-head">
+        <div>
+          <h1>Historial</h1>
+          <p class="muted">Todo lo que se cargó a Odoo, con quién y cuándo.</p>
+        </div>
+      </header>
+      <div class="card"><div id="tabla-historial"></div></div>
+    </section>
+
+    <!-- ================= AJUSTES ================= -->
+    <section class="view" id="view-ajustes">
+      <header class="view-head">
+        <div>
+          <h1>Ajustes</h1>
+          <p class="muted">Las claves se guardan cifradas (AES-256) en este equipo y nunca se muestran completas.</p>
+        </div>
+        <button class="btn primary" id="btn-guardar">Guardar cambios</button>
+      </header>
+
+      <div class="tabs" id="tabs">
+        <button data-tab="odoo" class="active">Odoo</button>
+        <button data-tab="bancos">Bancos</button>
+        <button data-tab="telegram">Telegram</button>
+        <button data-tab="reglas">Reglas</button>
+      </div>
+
+      <!-- Odoo -->
+      <div class="tab-pane active" data-pane="odoo">
+        <div class="card">
+          <div class="card-head">
+            <h3>Conexión con Odoo</h3>
+            <button class="btn" id="btn-probar-odoo">⚡ Probar conexión</button>
+          </div>
+          <div class="grid form">
+            <label class="field span2"><span>URL de Odoo</span>
+              <input id="odoo-url" placeholder="https://empresa.odoo.com" autocomplete="off" />
+            </label>
+            <label class="field"><span>Base de datos</span>
+              <input id="odoo-db" placeholder="se detecta de la URL en odoo.com" autocomplete="off" />
+            </label>
+            <label class="field"><span>Usuario (correo)</span>
+              <input id="odoo-username" placeholder="bot@empresa.com" autocomplete="off" />
+            </label>
+            <label class="field span2"><span>Contraseña o API Key</span>
+              <input id="odoo-secret" type="password" autocomplete="new-password" />
+              <small class="hint" id="odoo-secret-hint"></small>
+            </label>
+          </div>
+          <p class="note">💡 Recomendado: un usuario exclusivo para el bot con API Key (Odoo → Mi perfil → Seguridad de la cuenta → Nueva clave API).</p>
+          <div id="odoo-result"></div>
+        </div>
+      </div>
+
+      <!-- Bancos -->
+      <div class="tab-pane" data-pane="bancos">
+        <div class="card-head outer">
+          <p class="muted">Cada cuenta se vincula con su diario de banco en Odoo. Las credenciales API se activan cuando el banco las entregue.</p>
+          <button class="btn" id="btn-add-cuenta">＋ Agregar cuenta</button>
+        </div>
+        <div id="lista-cuentas"></div>
+      </div>
+
+      <!-- Telegram -->
+      <div class="tab-pane" data-pane="telegram">
+        <div class="card">
+          <div class="card-head">
+            <h3>Bot de Telegram</h3>
+            <button class="btn" id="btn-probar-tg">⚡ Probar y enviar mensaje</button>
+          </div>
+          <div class="grid form">
+            <label class="field span2"><span>Token del bot (de @BotFather)</span>
+              <input id="tg-token" type="password" autocomplete="new-password" />
+              <small class="hint" id="tg-token-hint"></small>
+            </label>
+            <label class="field span2"><span>Chats de administración (IDs separados por coma)</span>
+              <input id="tg-admins" placeholder="123456789, -1001234567890" />
+              <small class="hint">Escríbele <code>/id</code> al bot desde cada chat o grupo para conocer su ID.</small>
+            </label>
+            <label class="field"><span>Chat de cobranza (próxima fase)</span>
+              <input id="tg-cobranza" placeholder="-100…" />
+            </label>
+            <label class="switch field"><input type="checkbox" id="tg-enabled" /><span class="slider"></span><span>Bot encendido</span></label>
+          </div>
+          <div id="tg-result"></div>
+        </div>
+      </div>
+
+      <!-- Reglas -->
+      <div class="tab-pane" data-pane="reglas">
+        <div class="card">
+          <h3>Reglas de conversión</h3>
+          <div class="grid form">
+            <label class="field"><span>Etiqueta de comisiones</span>
+              <input id="r-etiqueta" />
+            </label>
+            <label class="field"><span>Columna "Etiqueta" en movimientos normales</span>
+              <select id="r-modo">
+                <option value="copiar">Copiar la descripción del banco (como el archivo de ejemplo)</option>
+                <option value="vacia">Dejar vacía (como dice el prompt)</option>
+              </select>
+            </label>
+            <label class="field"><span>Zona horaria</span>
+              <input id="r-tz" />
+            </label>
+            <label class="switch field"><input type="checkbox" id="r-hoy" /><span class="slider"></span><span>No subir movimientos del día en curso</span></label>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toasts"></div>
+  <script src="app.js" type="module"></script>
+</body>
+</html>
