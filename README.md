@@ -18,6 +18,24 @@ Automatiza la carga diaria de los estados de cuenta bancarios a **Odoo**, con un
 5. **Bot de Telegram**: se le manda el estado de cuenta y devuelve un Excel por día más un botón **“Subir a Odoo”**. Solo responde a los chats autorizados.
 6. **Ajustes**: Odoo, cuentas bancarias (con su diario de Odoo y sus credenciales API), Telegram y reglas. Todo **cifrado con AES-256-GCM** en `data/`.
 
+## Verificación de pagos móviles — API Conciliación BDV
+
+Menú **Verificar pago** (o comando `/pago` en Telegram). Se ingresan los datos del comprobante del cliente y el **Banco de Venezuela** responde si el pago llegó:
+
+- ✅ **Confirmado** (código 1000 y el monto coincide)
+- ❌ **No encontrado** (código 1010 u otro)
+- 🚨 **Comprobante ya usado**: el mismo pago (banco + referencia + fecha) ya se aceptó antes. Se bloquea sin consultar al banco.
+
+Configuración en **Ajustes → Bancos → Banco de Venezuela**: ambiente, **API Key** (se genera en BDVenLínea Empresas) y el **teléfono Pago Móvil de la empresa**. Si hay varias empresas o cuentas, crea una cuenta por cada API Key.
+
+> Esta API **no** descarga el estado de cuenta: el extracto diario del BDV sigue por archivo.
+
+Telegram (chats de administración o el chat de cobranza):
+
+```
+/pago V12345678 04141234567 123456 10/11/2026 1250,00 0102 [CUENTA]
+```
+
 ## Instalación
 
 Requiere **Node.js 20 o superior**.
@@ -69,6 +87,6 @@ test/                       pruebas (npm test)
 
 - Conectores API de Banesco, Mercantil, etc. (cuando los bancos entreguen la documentación) y carga automática cada mañana.
 - Órdenes de pago por Telegram con validación por **cédula/RIF** y comprobante al grupo de administración.
-- Canal de cobranza: comprobante del cliente → verificación automática contra el banco.
+- Lectura automática (OCR) de la foto del comprobante en el canal de cobranza.
 - Generador del TXT de Todoticket.
 - Concepto del pago (“para qué es”) cruzado con el extracto.

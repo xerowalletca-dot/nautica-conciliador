@@ -3,7 +3,7 @@
 
 export const MODOS = {
   archivo: 'Archivo (el estado de cuenta se sube al panel o al bot de Telegram)',
-  api: 'API del banco (consulta automática de movimientos)',
+  api: 'API del banco',
 };
 
 const CAMPOS_API = [
@@ -12,6 +12,21 @@ const CAMPOS_API = [
   { key: 'clientSecret', label: 'Client Secret', tipo: 'secret' },
   { key: 'apiKey', label: 'API Key / Token', tipo: 'secret' },
   { key: 'rif', label: 'RIF de la empresa', tipo: 'text', placeholder: 'J-00000000-0' },
+];
+
+// Banco de Venezuela: "API Conciliación BDV" (manual MDU-006). Verifica pagos móviles recibidos, uno por uno.
+// La API Key se genera en BDVenLínea Empresas; el teléfono destino es el Pago Móvil de la empresa.
+const CAMPOS_BDV = [
+  {
+    key: 'ambiente',
+    label: 'Ambiente',
+    tipo: 'select',
+    opciones: { produccion: 'Producción (bdvconciliacion.banvenez.com)', calidad: 'Calidad / pruebas del banco' },
+  },
+  { key: 'apiKey', label: 'API Key (BDVenLínea Empresas)', tipo: 'secret' },
+  { key: 'telefonoDestino', label: 'Teléfono Pago Móvil de la empresa', tipo: 'text', placeholder: '04121234567' },
+  { key: 'rif', label: 'RIF de la empresa', tipo: 'text', placeholder: 'J-00000000-0' },
+  { key: 'baseUrl', label: 'URL (opcional, solo si el banco la cambia)', tipo: 'text', placeholder: 'por defecto la del manual' },
 ];
 
 export const BANCOS = [
@@ -36,7 +51,11 @@ export const BANCOS = [
   { codigo: '0171', nombre: 'Banco Activo', comisionPct: 0.3, refLargo: 0 },
   { codigo: '0128', nombre: 'Banco Caroní', comisionPct: 0.3, refLargo: 0 },
   { codigo: '0177', nombre: 'Banfanb', comisionPct: 0.3, refLargo: 0 },
-].map((b) => ({ ...b, camposApi: CAMPOS_API }));
+].map((b) =>
+  b.codigo === '0102'
+    ? { ...b, camposApi: CAMPOS_BDV, api: { verificarPago: true, movimientos: false, nota: 'API Conciliación BDV: verifica pagos móviles recibidos (no descarga el estado de cuenta).' } }
+    : { ...b, camposApi: CAMPOS_API, api: { verificarPago: false, movimientos: false, nota: 'Conector pendiente de la documentación del banco.' } },
+);
 
 export function bancoPorCodigo(codigo) {
   return BANCOS.find((b) => b.codigo === codigo);
@@ -55,7 +74,7 @@ export function nuevaCuenta(codigo = '0134') {
     diarioOdooNombre: '',
     modo: 'archivo',
     activa: true,
-    api: { baseUrl: '', clientId: '', clientSecret: '', apiKey: '', rif: '' },
+    api: { baseUrl: '', clientId: '', clientSecret: '', apiKey: '', rif: '', ambiente: 'produccion', telefonoDestino: '' },
     comision: {
       porcentaje: banco.comisionPct, // % que cobra el banco (Banesco Pago Móvil = 0,3 %)
       ratioMaximo: 1, // una línea "hermana" es comisión si pesa ≤ este % de la principal

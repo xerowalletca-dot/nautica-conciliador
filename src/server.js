@@ -6,7 +6,8 @@ import { loadSettings, saveSettings, maskSettings, mergeIncoming, loadHistory, d
 import { OdooClient, guessDbFromUrl, normalizeOdooUrl } from './lib/odoo.js';
 import { TelegramClient } from './lib/telegram.js';
 import { BANCOS, MODOS, nuevaCuenta } from './bancos/catalogo.js';
-import { probarCuenta } from './bancos/conectores.js';
+import { probarCuenta, capacidades } from './bancos/conectores.js';
+import { verificarPago, cuentasVerificables, historialVerificaciones } from './cobranza/verificador.js';
 import { analizar, obtenerAnalisis, excelDe, subirAOdoo, enviarATelegram } from './conciliador/servicio.js';
 import { reiniciarBot, estadoBot } from './telegram/bot.js';
 
@@ -110,6 +111,19 @@ app.post('/api/bancos/:id/probar', ruta(async (req, res) => {
   res.json(await probarCuenta(cuenta));
 }));
 
+// ---------------- Cobranza: verificación de pagos ----------------
+
+app.get('/api/cobranza/cuentas', ruta((req, res) => {
+  res.json(cuentasVerificables().map((c) => ({ id: c.id, alias: c.alias, banco: c.banco, ambiente: c.api?.ambiente || 'produccion', telefonoDestino: c.api?.telefonoDestino || '' })));
+}));
+
+app.post('/api/cobranza/verificar', ruta(async (req, res) => {
+  const { cuentaId, ...pago } = req.body || {};
+  res.json(await verificarPago({ cuentaId, pago, usuario: 'panel', canal: 'panel' }));
+}));
+
+app.get('/api/cobranza/historial', ruta((req, res) => res.json(historialVerificaciones())));
+
 // ---------------- Conciliación ----------------
 
 app.post(
@@ -144,7 +158,9 @@ app.post('/api/conciliacion/:id/telegram', ruta(async (req, res) => {
 
 app.get('/api/estado', ruta((req, res) => {
   const s = loadSettings();
-  const hist = loadHistory();
+  const todo = loadHistory();
+  const hist = todo.filter((h) => h.tipo === 'odoo');
+  const verif = todo.filter((h) => h.tipo === 'verificacion');
   res.json({
     odoo: { configurado: Boolean(s.odoo.url && s.odoo.username && s.odoo.secret), url: s.odoo.url, db: s.odoo.db },
     telegram: { configurado: Boolean(s.telegram.token), habilitado: s.telegram.enabled, admins: s.telegram.adminChatIds.length, bot: estadoBot() },
@@ -154,13 +170,19 @@ app.get('/api/estado', ruta((req, res) => {
       banco: c.banco,
       modo: c.modo,
       diario: c.diarioOdooNombre,
+      verificaPagos: capacidades(c.banco).verificarPago && Boolean(c.api?.apiKeyGuardado || c.api?.apiKey || c.api?.ambiente === 'calidad'),
       ultimoDia: hist.find((h) => h.tipo === 'odoo' && h.ok && h.cuentaId === c.id)?.dia || null,
     })),
     historial: hist.slice(0, 15),
+    verificaciones: {
+      hoy: verif.filter((v) => v.fecha.slice(0, 10) === new Date().toISOString().slice(0, 10)).length,
+      confirmadas: verif.filter((v) => v.estado === 'confirmado').length,
+      reutilizados: verif.filter((v) => v.estado === 'reutilizado').length,
+    },
   });
 }));
 
-app.get('/api/historial', ruta((req, res) => res.json(loadHistory())));
+app.get('/api/historial', ruta((req, res) => res.json(loadHistory().filter((h) => h.tipo === 'odoo'))));
 
 app.listen(PORT, HOST, async () => {
   console.log(`\n  🧾 Conciliador Náutica listo en http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n`);

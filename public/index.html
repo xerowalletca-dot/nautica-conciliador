@@ -19,6 +19,7 @@
     <nav>
       <a href="#panel" data-view="panel"><span>◉</span> Panel</a>
       <a href="#conciliar" data-view="conciliar"><span>⇅</span> Conciliar extracto</a>
+      <a href="#verificar" data-view="verificar"><span>✓</span> Verificar pago</a>
       <a href="#historial" data-view="historial"><span>☰</span> Historial</a>
       <a href="#ajustes" data-view="ajustes"><span>⚙</span> Ajustes</a>
     </nav>
@@ -81,6 +82,36 @@
         </label>
       </div>
       <div id="resultado"></div>
+    </section>
+
+    <!-- ================= VERIFICAR PAGO ================= -->
+    <section class="view" id="view-verificar">
+      <header class="view-head">
+        <div>
+          <h1>Verificar pago móvil</h1>
+          <p class="muted">Consulta al banco si el pago del cliente llegó de verdad. Un mismo comprobante solo se acepta una vez.</p>
+        </div>
+      </header>
+      <div class="grid two">
+        <div class="card">
+          <h3>Datos del comprobante</h3>
+          <form id="form-verificar" class="grid form" autocomplete="off">
+            <label class="field span2"><span>Cuenta que recibe</span><select name="cuentaId" id="v-cuenta"></select></label>
+            <label class="field"><span>Cédula del pagador</span><input name="cedulaPagador" placeholder="V12345678" required /></label>
+            <label class="field"><span>Teléfono del pagador</span><input name="telefonoPagador" placeholder="04141234567" required /></label>
+            <label class="field"><span>Referencia</span><input name="referencia" placeholder="123456789" required /></label>
+            <label class="field"><span>Fecha del pago</span><input name="fechaPago" type="date" required /></label>
+            <label class="field"><span>Monto (Bs)</span><input name="importe" placeholder="1.250,00" required /></label>
+            <label class="field"><span>Banco de origen</span><select name="bancoOrigen" id="v-banco"></select></label>
+            <div class="span2 row gap"><button class="btn primary" type="submit">🔎 Verificar con el banco</button></div>
+          </form>
+          <div id="v-resultado"></div>
+        </div>
+        <div class="card">
+          <h3>Últimas verificaciones</h3>
+          <div id="v-historial"></div>
+        </div>
+      </div>
     </section>
 
     <!-- ================= HISTORIAL ================= -->

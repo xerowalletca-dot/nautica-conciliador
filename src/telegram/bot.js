@@ -8,6 +8,7 @@ import { loadSettings } from '../lib/store.js';
 import { analizar, excelDe, subirAOdoo, resumenTexto, obtenerAnalisis } from '../conciliador/servicio.js';
 import { norm } from '../conciliador/parser.js';
 import { bancoPorCodigo } from '../bancos/catalogo.js';
+import { verificarPago, leerComandoPago } from '../cobranza/verificador.js';
 
 let estado = { activo: false, usuario: null, error: null, desde: null };
 let ciclo = 0; // cambia en cada reinicio para cortar el bucle anterior
@@ -63,6 +64,38 @@ function autorizado(settings, chatId) {
   return ids.includes(String(chatId));
 }
 
+function esCobranza(settings, chatId) {
+  return Boolean(settings.telegram.cobranzaChatId) && String(settings.telegram.cobranzaChatId) === String(chatId);
+}
+
+const ICONO_VERIF = { confirmado: '✅', no_encontrado: '❌', reutilizado: '🚨' };
+
+async function comandoPago(tg, chatId, texto, from) {
+  let datos;
+  try {
+    datos = leerComandoPago(texto);
+  } catch (err) {
+    return tg.sendMessage(chatId, escapeHtml(err.message));
+  }
+  try {
+    const r = await verificarPago({ ...datos, usuario: from?.username || from?.first_name || 'telegram', canal: 'telegram' });
+    const s = r.solicitud;
+    const titulo = { confirmado: 'PAGO CONFIRMADO', no_encontrado: 'PAGO NO ENCONTRADO', reutilizado: 'COMPROBANTE YA USADO' }[r.estado];
+    return tg.sendMessage(
+      chatId,
+      [
+        `${ICONO_VERIF[r.estado]} <b>${titulo}</b>`,
+        `Cuenta: ${escapeHtml(r.cuenta)}`,
+        `Ref ${escapeHtml(s.referencia)} · ${s.fechaPago.split('-').reverse().join('/')} · Bs ${escapeHtml(s.importe)}`,
+        `${escapeHtml(s.cedulaPagador)} · ${escapeHtml(s.telefonoPagador)} · banco ${escapeHtml(s.bancoOrigen)}`,
+        r.mensaje ? `<i>${escapeHtml(r.mensaje)}</i>` : '',
+      ].filter(Boolean).join('\n'),
+    );
+  } catch (err) {
+    return tg.sendMessage(chatId, `⚠️ No se pudo verificar: ${escapeHtml(err.message)}`);
+  }
+}
+
 function cuentasActivas(settings) {
   return settings.cuentas.filter((c) => c.activa !== false);
 }
@@ -89,7 +122,17 @@ async function manejar(tg, u) {
   if (texto.startsWith('/id') || (texto.startsWith('/start') && !autorizado(settings, chatId))) {
     return tg.sendMessage(chatId, `🆔 El ID de este chat es <code>${chatId}</code>.\nAgrégalo en el panel → Ajustes → Telegram para autorizarlo.`);
   }
-  if (!autorizado(settings, chatId)) return; // silencio para chats no autorizados
+  const admin = autorizado(settings, chatId);
+  const cobranza = esCobranza(settings, chatId);
+  if (!admin && !cobranza) return; // silencio para chats no autorizados
+
+  if (/^\/(pago|verificar)\b/i.test(texto)) return comandoPago(tg, chatId, texto, msg.from);
+  if (!admin) {
+    if (texto.startsWith('/')) {
+      return tg.sendMessage(chatId, 'Para verificar un pago móvil:\n<code>/pago CÉDULA TELÉFONO REFERENCIA FECHA MONTO BANCO</code>\nEj: <code>/pago V12345678 04141234567 123456 10/11/2026 1250,00 0102</code>');
+    }
+    return;
+  }
 
   if (texto.startsWith('/start') || texto.startsWith('/ayuda')) {
     return tg.sendMessage(
@@ -99,6 +142,9 @@ async function manejar(tg, u) {
         '',
         '📎 Mándame el estado de cuenta (Excel, CSV o TXT) y te devuelvo <b>un archivo por día</b> listo para Odoo.',
         'Si hay varias cuentas, escribe el alias en el mensaje del archivo (ej. <i>BANESCO</i>).',
+        '',
+        '🔎 Verificar un pago móvil (BDV):',
+        '<code>/pago CÉDULA TELÉFONO REFERENCIA FECHA MONTO BANCO</code>',
         '',
         '/cuentas — cuentas configuradas',
         '/id — ID de este chat',

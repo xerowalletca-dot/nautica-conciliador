@@ -41,7 +41,7 @@ async function conCarga(btn, fn) {
 const bancoNombre = (codigo) => state.catalogo?.bancos.find((b) => b.codigo === codigo)?.nombre || codigo;
 
 // ================= Router =================
-const vistas = { panel: cargarPanel, conciliar: cargarConciliar, historial: cargarHistorial, ajustes: cargarAjustes };
+const vistas = { panel: cargarPanel, conciliar: cargarConciliar, verificar: cargarVerificar, historial: cargarHistorial, ajustes: cargarAjustes };
 function router() {
   const vista = (location.hash || '#panel').slice(1);
   const v = vistas[vista] ? vista : 'panel';
@@ -82,6 +82,14 @@ async function cargarPanel() {
         return h ? fecha(h.dia) : '—';
       })(),
       sub: e.historial.find((x) => x.tipo === 'odoo' && x.ok)?.cuenta || 'Sin cargas todavía',
+    },
+    {
+      label: 'Cobranza (verificación)',
+      dot: e.cuentas.some((c) => c.verificaPagos) ? 'ok' : 'warn',
+      value: e.cuentas.some((c) => c.verificaPagos) ? `${e.verificaciones.hoy} hoy` : 'Sin API',
+      sub: e.cuentas.some((c) => c.verificaPagos)
+        ? `${e.verificaciones.confirmadas} confirmados · ${e.verificaciones.reutilizados} reutilizados bloqueados`
+        : 'Agrega la API Key del BDV en Ajustes → Bancos',
     },
   ];
   $('#status-cards').innerHTML = tarjetas
@@ -247,6 +255,72 @@ async function subirOdoo(btn, fechas, forzar = false) {
   });
 }
 
+// ================= Verificar pago =================
+const VEREDICTO = {
+  confirmado: ['✅', 'Pago confirmado por el banco'],
+  no_encontrado: ['❌', 'El banco no encuentra este pago'],
+  reutilizado: ['🚨', 'Comprobante ya utilizado'],
+};
+
+async function cargarVerificar() {
+  const [cuentas, hist] = await Promise.all([api('/api/cobranza/cuentas'), api('/api/cobranza/historial')]);
+  const sel = $('#v-cuenta');
+  const previo = sel.value;
+  sel.innerHTML = cuentas.length
+    ? cuentas.map((c) => `<option value="${esc(c.id)}">${esc(c.alias)} · ${esc(bancoNombre(c.banco))}${c.ambiente === 'calidad' ? ' (PRUEBAS)' : ''}${c.telefonoDestino ? ` · ${esc(c.telefonoDestino)}` : ''}</option>`).join('')
+    : '<option value="">Configura una cuenta BDV con API Key en Ajustes → Bancos</option>';
+  if (previo && cuentas.some((c) => c.id === previo)) sel.value = previo;
+  const banco = $('#v-banco');
+  if (!banco.options.length) {
+    banco.innerHTML = state.catalogo.bancos.map((b) => `<option value="${b.codigo}">${b.codigo} · ${esc(b.nombre)}</option>`).join('');
+    banco.value = '0102';
+  }
+  const f = $('#form-verificar');
+  if (!f.fechaPago.value) f.fechaPago.value = new Date(Date.now() - 4 * 3600 * 1000).toISOString().slice(0, 10);
+  pintarHistorialVerif(hist);
+}
+
+function pintarHistorialVerif(hist) {
+  $('#v-historial').innerHTML = hist.length
+    ? hist
+        .slice(0, 25)
+        .map((h) => {
+          const [icono] = VEREDICTO[h.estado] || ['⚠️'];
+          return `<div class="list-item"><span style="font-size:18px">${icono}</span><div class="grow"><b>Bs ${esc(h.importe)}</b> · ref ${esc(h.referencia)} · ${esc(h.cedula)}
+            <div class="muted small">${esc(h.cuenta)} · pago del ${fecha(h.fechaPago)} · ${esc(h.bancoOrigenNombre || h.bancoOrigen)} · ${esc(h.canal)}/${esc(h.usuario)}${h.estado === 'error' ? ` · ${esc(h.mensaje)}` : ''}</div></div>
+            <div class="muted small">${new Date(h.fecha).toLocaleString('es-VE')}</div></div>`;
+        })
+        .join('')
+    : '<div class="empty">Aún no se ha verificado ningún pago.</div>';
+}
+
+function initVerificar() {
+  $('#form-verificar').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const btn = e.submitter || $('#form-verificar button[type=submit]');
+    const datos = Object.fromEntries(new FormData(form).entries());
+    conCarga(btn, async () => {
+      $('#v-resultado').innerHTML = '';
+      try {
+        const r = await api('/api/cobranza/verificar', json('POST', datos));
+        const [icono, titulo] = VEREDICTO[r.estado];
+        const s = r.solicitud;
+        $('#v-resultado').innerHTML = `<div class="verdict ${r.estado}"><div class="big">${icono}</div><div>
+          <h4>${titulo}</h4>
+          <div>Bs <b>${esc(s.importe)}</b> · ref <code>${esc(s.referencia)}</code> · ${fecha(s.fechaPago)} · ${esc(s.cedulaPagador)} · ${esc(s.telefonoPagador)}</div>
+          <div class="muted small" style="margin-top:6px">${esc(r.mensaje)}${r.ambiente === 'calidad' ? ' · ⚠️ ambiente de PRUEBAS del banco' : ''}</div></div></div>`;
+        if (r.estado === 'confirmado') {
+          ['referencia', 'importe', 'cedulaPagador', 'telefonoPagador'].forEach((k) => (form[k].value = ''));
+        }
+      } catch (err) {
+        $('#v-resultado').innerHTML = `<div class="alert bad">⚠️ ${esc(err.message)}</div>`;
+      }
+      pintarHistorialVerif(await api('/api/cobranza/historial'));
+    });
+  });
+}
+
 // ================= Historial =================
 async function cargarHistorial() {
   const h = await api('/api/historial');
@@ -325,11 +399,17 @@ function pintarCuentas() {
             <label class="field span2"><span>Palabras clave en la descripción</span><input data-k="comision.palabrasClave" value="${esc((c.comision?.palabrasClave || []).join(', '))}" /></label>
           </div>
         </fieldset>
-        <fieldset ${c.modo === 'api' ? '' : 'style="opacity:.6"'}>
+        <fieldset ${c.modo === 'api' || bancos.find((b) => b.codigo === c.banco)?.api?.verificarPago ? '' : 'style="opacity:.6"'}>
           <legend>Credenciales API del banco</legend>
+          <p class="api-nota">${esc(bancos.find((b) => b.codigo === c.banco)?.api?.nota || '')}</p>
           <div class="grid form">
             ${(bancos.find((b) => b.codigo === c.banco)?.camposApi || [])
               .map((f) => {
+                if (f.tipo === 'select') {
+                  return `<label class="field"><span>${esc(f.label)}</span><select data-k="api.${f.key}">${Object.entries(f.opciones)
+                    .map(([k, v]) => `<option value="${esc(k)}" ${(c.api?.[f.key] || Object.keys(f.opciones)[0]) === k ? 'selected' : ''}>${esc(v)}</option>`)
+                    .join('')}</select></label>`;
+                }
                 const guardado = c.api?.[`${f.key}Guardado`];
                 return `<label class="field"><span>${esc(f.label)}</span><input data-k="api.${f.key}" ${f.tipo === 'secret' ? 'type="password" autocomplete="new-password"' : ''} value="${f.tipo === 'secret' ? '' : esc(c.api?.[f.key])}" placeholder="${f.tipo === 'secret' && guardado ? `Guardado ${esc(c.api[`${f.key}Pista`])}` : esc(f.placeholder || '')}" /></label>`;
               })
@@ -467,5 +547,6 @@ function initAjustes() {
   state.catalogo = await api('/api/catalogo');
   initDrop();
   initAjustes();
+  initVerificar();
   router();
 })();
