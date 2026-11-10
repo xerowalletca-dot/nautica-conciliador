@@ -20,6 +20,19 @@ export const AMBIENTES = {
   produccion: { tokenUrl: '', saldoUrl: '', movimientosUrl: '' }, // Banesco las entrega junto con las credenciales
 };
 
+// Valores de ejemplo del ambiente de Calidad tal como aparecen en el manual 374-TICPN-03 (tabla V1 y pág. 8).
+// Sirven para probar la conexión de punta a punta; las credenciales reales de la empresa las asigna Banesco.
+export const DATOS_MANUAL_QA = {
+  ambiente: 'calidad',
+  tokenUrl: AMBIENTES.calidad.tokenUrl,
+  saldoUrl: AMBIENTES.calidad.saldoUrl,
+  clientId: '3fd65d14',
+  clientSecret: '34ec3e365a42bd3b3ff16bf13b6d2568',
+  scope: '',
+  rif: 'J-316489384',
+  usuarioBanesco: 'AVILAEXPR',
+};
+
 export class BanescoError extends BdvError {}
 
 const tokens = new Map(); // cache: clave -> { token, vence }
@@ -76,6 +89,7 @@ export async function obtenerToken(cuenta, { fetchImpl = fetch } = {}) {
   } else {
     form.set('grant_type', 'client_credentials');
   }
+  form.set('client_id', c.clientId); // tabla V4 del manual: payload client_id
   if (c.scope) form.set('scope', c.scope);
   const res = await llamar(fetchImpl, c.tokenUrl, {
     method: 'POST',

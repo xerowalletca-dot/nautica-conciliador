@@ -93,7 +93,7 @@ test('token OAuth: Basic base64(clientId:secret) + client_credentials, y se reut
   await banesco.obtenerToken(cuenta);
   const tokenCalls = llamadas.filter((l) => l.url === cuenta.api.tokenUrl);
   assert.equal(tokenCalls.length, 1);
-  assert.equal(tokenCalls[0].body, 'grant_type=client_credentials');
+  assert.equal(tokenCalls[0].body, 'grant_type=client_credentials&client_id=cli123');
   assert.equal(tokenCalls[0].headers['Content-Type'], 'application/x-www-form-urlencoded');
 });
 

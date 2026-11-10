@@ -6,6 +6,7 @@ import { loadSettings, saveSettings, maskSettings, mergeIncoming, loadHistory, d
 import { OdooClient, guessDbFromUrl, normalizeOdooUrl } from './lib/odoo.js';
 import { TelegramClient } from './lib/telegram.js';
 import { BANCOS, MODOS, nuevaCuenta } from './bancos/catalogo.js';
+import { DATOS_MANUAL_QA } from './bancos/banesco.js';
 import { probarCuenta, capacidades, consultarSaldo } from './bancos/conectores.js';
 import { ejecutarSincronizacion, iniciarProgramador, estadoAutomatizacion } from './automatizacion/diaria.js';
 import { verificarPago, cuentasVerificables, historialVerificaciones } from './cobranza/verificador.js';
@@ -64,7 +65,7 @@ app.put('/api/ajustes', ruta(async (req, res) => {
   res.json(maskSettings(nuevo));
 }));
 
-app.get('/api/catalogo', (req, res) => res.json({ bancos: BANCOS, modos: MODOS, cuentaNueva: nuevaCuenta() }));
+app.get('/api/catalogo', (req, res) => res.json({ bancos: BANCOS, modos: MODOS, cuentaNueva: nuevaCuenta(), presets: { '0134': DATOS_MANUAL_QA } }));
 
 // ---------------- Odoo ----------------
 
