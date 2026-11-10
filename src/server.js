@@ -6,9 +6,11 @@ import { loadSettings, saveSettings, maskSettings, mergeIncoming, loadHistory, d
 import { OdooClient, guessDbFromUrl, normalizeOdooUrl } from './lib/odoo.js';
 import { TelegramClient } from './lib/telegram.js';
 import { BANCOS, MODOS, nuevaCuenta } from './bancos/catalogo.js';
-import { probarCuenta, capacidades } from './bancos/conectores.js';
+import { probarCuenta, capacidades, consultarSaldo } from './bancos/conectores.js';
+import { ejecutarSincronizacion, iniciarProgramador, estadoAutomatizacion } from './automatizacion/diaria.js';
 import { verificarPago, cuentasVerificables, historialVerificaciones } from './cobranza/verificador.js';
-import { analizar, obtenerAnalisis, excelDe, subirAOdoo, enviarATelegram } from './conciliador/servicio.js';
+import { analizar, analizarDesdeBanco, rangoPendiente, obtenerAnalisis, excelDe, subirAOdoo, enviarATelegram } from './conciliador/servicio.js';
+import { todayIn } from './conciliador/reglas.js';
 import { reiniciarBot, estadoBot } from './telegram/bot.js';
 
 const app = express();
@@ -111,6 +113,20 @@ app.post('/api/bancos/:id/probar', ruta(async (req, res) => {
   res.json(await probarCuenta(cuenta));
 }));
 
+app.get('/api/bancos/:id/saldo', ruta(async (req, res) => {
+  const cuenta = loadSettings().cuentas.find((c) => c.id === req.params.id);
+  if (!cuenta) throw new Error('Cuenta no encontrada.');
+  res.json(await consultarSaldo(cuenta));
+}));
+
+// ---------------- Automatización diaria ----------------
+
+app.get('/api/automatizacion', ruta((req, res) => res.json(estadoAutomatizacion())));
+
+app.post('/api/automatizacion/ejecutar', ruta(async (req, res) => {
+  res.json(await ejecutarSincronizacion({ disparo: 'panel', cuentaId: req.body?.cuentaId || null }));
+}));
+
 // ---------------- Cobranza: verificación de pagos ----------------
 
 app.get('/api/cobranza/cuentas', ruta((req, res) => {
@@ -135,6 +151,15 @@ app.post(
     res.json(await analizar(req.body, String(archivo || 'estado_de_cuenta'), String(cuentaId || '')));
   }),
 );
+
+app.post('/api/conciliacion/banco', ruta(async (req, res) => {
+  const { cuentaId, desde, hasta } = req.body || {};
+  res.json(await analizarDesdeBanco(String(cuentaId || ''), desde && hasta ? { desde, hasta } : {}));
+}));
+
+app.get('/api/conciliacion/rango/:cuentaId', ruta((req, res) => {
+  res.json(rangoPendiente(req.params.cuentaId, todayIn(loadSettings().empresa.zonaHoraria)));
+}));
 
 app.get('/api/conciliacion/:id', ruta((req, res) => res.json(obtenerAnalisis(req.params.id))));
 
@@ -170,10 +195,12 @@ app.get('/api/estado', ruta((req, res) => {
       banco: c.banco,
       modo: c.modo,
       diario: c.diarioOdooNombre,
-      verificaPagos: capacidades(c.banco).verificarPago && Boolean(c.api?.apiKeyGuardado || c.api?.apiKey || c.api?.ambiente === 'calidad'),
+      capacidades: capacidades(c.banco),
+      verificaPagos: capacidades(c.banco).verificarPago && Boolean(c.api?.apiKey || c.api?.clientSecret || c.api?.ambiente === 'calidad'),
       ultimoDia: hist.find((h) => h.tipo === 'odoo' && h.ok && h.cuentaId === c.id)?.dia || null,
     })),
     historial: hist.slice(0, 15),
+    automatizacion: estadoAutomatizacion(),
     verificaciones: {
       hoy: verif.filter((v) => v.fecha.slice(0, 10) === new Date().toISOString().slice(0, 10)).length,
       confirmadas: verif.filter((v) => v.estado === 'confirmado').length,
@@ -183,6 +210,8 @@ app.get('/api/estado', ruta((req, res) => {
 }));
 
 app.get('/api/historial', ruta((req, res) => res.json(loadHistory().filter((h) => h.tipo === 'odoo'))));
+
+iniciarProgramador();
 
 app.listen(PORT, HOST, async () => {
   console.log(`\n  🧾 Conciliador Náutica listo en http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n`);

@@ -6,8 +6,9 @@ import { construirDias, todayIn, ddmmyyyy } from './reglas.js';
 import { excelDelDia, nombreArchivo } from './excel.js';
 import { OdooClient } from '../lib/odoo.js';
 import { TelegramClient } from '../lib/telegram.js';
-import { loadSettings, addHistory, alreadyUploaded } from '../lib/store.js';
+import { loadSettings, addHistory, alreadyUploaded, loadHistory } from '../lib/store.js';
 import { bancoPorCodigo } from '../bancos/catalogo.js';
+import { obtenerMovimientos } from '../bancos/conectores.js';
 
 const analisis = new Map(); // id -> { creado, cuenta, archivo, resultado }
 const TTL_MS = 6 * 60 * 60 * 1000;
@@ -24,10 +25,52 @@ export function obtenerCuenta(settings, cuentaId) {
 }
 
 export async function analizar(buffer, archivo, cuentaId, { ahora = new Date() } = {}) {
-  limpiarViejos();
   const settings = loadSettings();
   const cuenta = obtenerCuenta(settings, cuentaId);
   const lectura = await parseStatement(buffer, archivo, { referenciaLargo: Number(cuenta.referenciaLargo) || 0 });
+  return registrarAnalisis(settings, cuenta, lectura, archivo, ahora);
+}
+
+/** Último día cargado a Odoo para una cuenta (o null). */
+export function ultimoDiaSubido(cuentaId) {
+  return loadHistory().find((h) => h.tipo === 'odoo' && h.ok && h.cuentaId === cuentaId)?.dia || null;
+}
+
+function sumarDias(iso, n) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Rango por defecto para traer del banco: desde el día siguiente al último cargado (máx. 7 días atrás) hasta ayer.
+ * Así, el martes trae sábado, domingo y lunes automáticamente.
+ */
+export function rangoPendiente(cuentaId, hoy) {
+  const ayer = sumarDias(hoy, -1);
+  const ultimo = ultimoDiaSubido(cuentaId);
+  let desde = ultimo ? sumarDias(ultimo, 1) : ayer;
+  const limite = sumarDias(hoy, -7);
+  if (desde < limite) desde = limite;
+  return { desde: desde > ayer ? ayer : desde, hasta: ayer };
+}
+
+/** Trae los movimientos directo de la API del banco y arma los días igual que con un archivo. */
+export async function analizarDesdeBanco(cuentaId, { desde, hasta, ahora = new Date() } = {}) {
+  const settings = loadSettings();
+  const cuenta = obtenerCuenta(settings, cuentaId);
+  const hoy = todayIn(settings.empresa.zonaHoraria, ahora);
+  const rango = desde && hasta ? { desde, hasta } : rangoPendiente(cuenta.id, hoy);
+  const movimientos = await obtenerMovimientos(cuenta, rango.desde, rango.hasta);
+  const lectura = { movimientos, columnas: { origen: 'API del banco' }, hoja: 'API', filaEncabezado: 0, advertencias: [] };
+  const nombre = rango.desde === rango.hasta ? `API ${ddmmyyyy(rango.desde)}` : `API ${ddmmyyyy(rango.desde)} → ${ddmmyyyy(rango.hasta)}`;
+  const a = registrarAnalisis(settings, cuenta, lectura, nombre, ahora);
+  a.rango = rango;
+  return a;
+}
+
+function registrarAnalisis(settings, cuenta, lectura, archivo, ahora) {
+  limpiarViejos();
   const hoy = todayIn(settings.empresa.zonaHoraria, ahora);
   const resultado = construirDias(lectura.movimientos, { cuenta, reglas: settings.reglas, hoy });
   for (const dia of resultado.dias) {

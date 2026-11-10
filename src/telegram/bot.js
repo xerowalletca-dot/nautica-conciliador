@@ -5,7 +5,9 @@
 import crypto from 'node:crypto';
 import { TelegramClient, escapeHtml } from '../lib/telegram.js';
 import { loadSettings } from '../lib/store.js';
-import { analizar, excelDe, subirAOdoo, resumenTexto, obtenerAnalisis } from '../conciliador/servicio.js';
+import { analizar, analizarDesdeBanco, excelDe, subirAOdoo, resumenTexto, obtenerAnalisis } from '../conciliador/servicio.js';
+import { textoSaldos, textoMovimientos, rangoExtracto, intencion, AYUDA_CONSULTAS } from './consultas.js';
+import { ejecutarSincronizacion } from '../automatizacion/diaria.js';
 import { norm } from '../conciliador/parser.js';
 import { bancoPorCodigo } from '../bancos/catalogo.js';
 import { verificarPago, leerComandoPago } from '../cobranza/verificador.js';
@@ -117,7 +119,7 @@ async function manejar(tg, u) {
   const msg = u.message;
   if (!msg) return;
   const chatId = msg.chat.id;
-  const texto = (msg.text || '').trim();
+  let texto = (msg.text || '').trim().replace(/^(\/\w+)@\w+/, '$1'); // "/saldo@MiBot" → "/saldo"
 
   if (texto.startsWith('/id') || (texto.startsWith('/start') && !autorizado(settings, chatId))) {
     return tg.sendMessage(chatId, `🆔 El ID de este chat es <code>${chatId}</code>.\nAgrégalo en el panel → Ajustes → Telegram para autorizarlo.`);
@@ -134,6 +136,36 @@ async function manejar(tg, u) {
     return;
   }
 
+  const traducido = intencion(texto);
+  if (traducido) texto = `${traducido} ${texto}`;
+
+  if (/^\/saldos?\b/i.test(texto)) {
+    await tg.api('sendChatAction', { chat_id: chatId, action: 'typing' }).catch(() => {});
+    return tg.sendMessage(chatId, await textoSaldos(texto));
+  }
+  if (/^\/movimientos?\b/i.test(texto)) {
+    await tg.api('sendChatAction', { chat_id: chatId, action: 'typing' }).catch(() => {});
+    return enviarLargo(tg, chatId, await textoMovimientos(texto));
+  }
+  if (/^\/extracto\b/i.test(texto)) {
+    const { cuentas, especifica, desde, hasta } = rangoExtracto(texto);
+    if (!cuentas.length) return tg.sendMessage(chatId, 'Ninguna cuenta tiene API de movimientos (Banesco). Para otros bancos, mándame el archivo.');
+    if (cuentas.length > 1 && !especifica) {
+      return tg.sendMessage(chatId, `¿De qué cuenta? Escribe por ejemplo <code>/extracto ${escapeHtml(cuentas[0].alias)} ayer</code>`);
+    }
+    await tg.sendMessage(chatId, '⏳ Consultando al banco…');
+    return procesar(tg, chatId, () => analizarDesdeBanco(cuentas[0].id, desde ? { desde, hasta } : {}), msg.from);
+  }
+  if (/^\/sincronizar\b/i.test(texto)) {
+    await tg.sendMessage(chatId, '🔄 Ejecutando la sincronización con los bancos…');
+    try {
+      const r = await ejecutarSincronizacion({ disparo: `telegram/${msg.from?.username || msg.from?.first_name || 'admin'}` });
+      return tg.sendMessage(chatId, r.map((x) => `${x.ok ? '✅' : '❌'} <b>${escapeHtml(x.cuenta)}</b>: ${escapeHtml(x.mensaje)}`).join('\n'));
+    } catch (err) {
+      return tg.sendMessage(chatId, `⚠️ ${escapeHtml(err.message)}`);
+    }
+  }
+
   if (texto.startsWith('/start') || texto.startsWith('/ayuda')) {
     return tg.sendMessage(
       chatId,
@@ -143,8 +175,7 @@ async function manejar(tg, u) {
         '📎 Mándame el estado de cuenta (Excel, CSV o TXT) y te devuelvo <b>un archivo por día</b> listo para Odoo.',
         'Si hay varias cuentas, escribe el alias en el mensaje del archivo (ej. <i>BANESCO</i>).',
         '',
-        '🔎 Verificar un pago móvil (BDV):',
-        '<code>/pago CÉDULA TELÉFONO REFERENCIA FECHA MONTO BANCO</code>',
+        AYUDA_CONSULTAS,
         '',
         '/cuentas — cuentas configuradas',
         '/id — ID de este chat',
@@ -161,7 +192,7 @@ async function manejar(tg, u) {
     if (msg.document.file_size > 20 * 1024 * 1024) return tg.sendMessage(chatId, '❌ El archivo pesa más de 20 MB.');
     const buffer = await tg.downloadFile(msg.document.file_id);
     const cuenta = elegirCuenta(settings, `${msg.caption || ''} ${archivo}`);
-    if (cuenta) return procesar(tg, chatId, buffer, archivo, cuenta.id, msg.from);
+    if (cuenta) return procesar(tg, chatId, () => analizar(buffer, archivo, cuenta.id), msg.from);
     const pid = crypto.randomBytes(6).toString('hex');
     pendientes.set(pid, { buffer, archivo, creado: Date.now() });
     const botones = cuentasActivas(settings).map((c) => [{ text: c.alias, callback_data: `cta:${pid}:${c.id}` }]);
@@ -170,13 +201,29 @@ async function manejar(tg, u) {
   }
 }
 
-async function procesar(tg, chatId, buffer, archivo, cuentaId, from) {
+async function enviarLargo(tg, chatId, texto) {
+  // Telegram admite ~4096 caracteres por mensaje
+  const bloques = [];
+  let actual = '';
+  for (const linea of texto.split('\n')) {
+    if ((actual + linea).length > 3800) {
+      bloques.push(actual);
+      actual = '';
+    }
+    actual += `${linea}\n`;
+  }
+  if (actual.trim()) bloques.push(actual);
+  for (const b of bloques) await tg.sendMessage(chatId, b);
+}
+
+async function procesar(tg, chatId, obtener, from) {
   let a;
   try {
-    a = await analizar(buffer, archivo, cuentaId);
+    a = await obtener();
   } catch (err) {
     return tg.sendMessage(chatId, `❌ ${escapeHtml(err.message)}`);
   }
+  if (!a.dias.length) return tg.sendMessage(chatId, `${resumenTexto(a)}\nSin movimientos en el rango consultado.`);
   const listos = a.dias.filter((d) => d.estado === 'listo');
   const markup = listos.length
     ? { reply_markup: { inline_keyboard: [[{ text: `📤 Subir ${listos.length} día(s) a Odoo`, callback_data: `odoo:${a.id}` }]] } }
@@ -199,7 +246,7 @@ async function manejarBoton(tg, settings, q) {
     pendientes.delete(a);
     if (!p) return tg.answerCallback(q.id, 'El archivo expiró, mándalo de nuevo.');
     await tg.answerCallback(q.id, 'Procesando…');
-    return procesar(tg, chatId, p.buffer, p.archivo, b, q.from);
+    return procesar(tg, chatId, () => analizar(p.buffer, p.archivo, b), q.from);
   }
 
   if (tipo === 'odoo') {

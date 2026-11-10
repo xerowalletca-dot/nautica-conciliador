@@ -218,3 +218,10 @@ tr.comision td { background: rgba(245, 185, 66, 0.08); }
 .verdict.no_encontrado { border-color: rgba(242, 84, 107, 0.5); background: rgba(242, 84, 107, 0.08); }
 .verdict.reutilizado { border-color: rgba(245, 185, 66, 0.6); background: rgba(245, 185, 66, 0.1); }
 .api-nota { font-size: 12px; color: var(--muted); margin: -4px 0 10px; }
+
+.api-box { margin-top: 16px; border: 1px solid rgba(99, 102, 241, 0.45); background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(34, 211, 166, 0.06)); border-radius: var(--radius); padding: 16px; }
+.api-box-head { margin-bottom: 10px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.wrap { flex-wrap: wrap; }
+.saldo { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.saldo:last-child { border-bottom: none; }
+.saldo b { font-variant-numeric: tabular-nums; font-size: 16px; }

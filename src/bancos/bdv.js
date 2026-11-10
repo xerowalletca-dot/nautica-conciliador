@@ -65,7 +65,7 @@ export function normReferencia(v) {
   return s;
 }
 
-/** Arma el JSON de entrada exacto que pide el manual. */
+/** Arma el JSON de entrada exacto que pide el manual. (normalizarPago es el nombre genérico que usa el verificador) */
 export function armarSolicitud(pago, cuenta) {
   return {
     cedulaPagador: normCedula(pago.cedulaPagador),
@@ -77,6 +77,8 @@ export function armarSolicitud(pago, cuenta) {
     bancoOrigen: normBanco(pago.bancoOrigen),
   };
 }
+
+export const normalizarPago = armarSolicitud;
 
 function configuracion(cuenta) {
   const api = cuenta?.api || {};

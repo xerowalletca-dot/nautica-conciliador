@@ -113,9 +113,34 @@ async function cargarPanel() {
         .join('')
     : '<div class="empty">Aún no hay actividad.</div>';
 
+  const au = e.automatizacion;
+  const ult = au.ultima;
+  $('#panel-auto').innerHTML = `
+    <div class="list-item"><span class="dot ${au.activa ? 'ok' : 'warn'}"></span><div class="grow"><b>${au.activa ? `Activo · todos los días a las ${esc(au.hora)}` : 'Apagado'}</b>
+      <div class="muted small">${au.cuentas.length ? `Cuentas: ${au.cuentas.map(esc).join(', ')}` : 'Ninguna cuenta Banesco en modo "API del banco"'} · ${au.subirOdoo ? 'sube a Odoo solo' : 'pide confirmación para Odoo'}</div></div></div>
+    ${ult ? `<div class="muted small" style="margin-top:8px">Última ejecución: ${new Date(ult.fecha).toLocaleString('es-VE')} (${esc(ult.disparo)}) — ${(ult.resultados || []).map((r) => `${r.ok ? '✅' : '❌'} ${esc(r.cuenta)}: ${esc(r.mensaje)}`).join(' · ') || 'sin cuentas'}</div>` : ''}`;
+  state.cuentasSaldo = e.cuentas.filter((c) => c.capacidades?.saldo && c.modo === 'api');
+
   if (!state.ajustes) state.ajustes = await api('/api/ajustes');
   $('#regla-etiqueta').textContent = state.ajustes.reglas.etiquetaComision;
   $('#foot-status').innerHTML = `<div><span class="dot ${e.odoo.configurado ? 'ok' : 'warn'}"></span> Odoo</div><div><span class="dot ${bot.activo ? 'ok' : 'warn'}"></span> Telegram</div>`;
+}
+
+async function consultarSaldos(btn) {
+  const cuentas = state.cuentasSaldo || [];
+  if (!cuentas.length) return toast('Ninguna cuenta Banesco en modo "API del banco" (Ajustes → Bancos).', 'warn');
+  await conCarga(btn, async () => {
+    const bloques = [];
+    for (const c of cuentas) {
+      try {
+        const saldos = await api(`/api/bancos/${c.id}/saldo`);
+        bloques.push(`<div class="muted small" style="margin-top:6px">${esc(c.alias)}</div>${saldos.map((s) => `<div class="saldo"><span>${esc(s.cuenta)} <span class="tag info">${esc(s.tipo)}</span></span><b>Bs ${bs(s.saldo)}</b></div>`).join('')}`);
+      } catch (err) {
+        bloques.push(`<div class="alert bad">${esc(c.alias)}: ${esc(err.message)}</div>`);
+      }
+    }
+    $('#panel-saldos').innerHTML = bloques.join('') + `<div class="muted small" style="margin-top:8px">Consultado ${new Date().toLocaleTimeString('es-VE')}</div>`;
+  });
 }
 
 // ================= Conciliar =================
@@ -128,7 +153,40 @@ async function cargarConciliar() {
     ? cuentas.map((c) => `<option value="${esc(c.id)}">${esc(c.alias)} — ${esc(bancoNombre(c.banco))}${c.numero ? ` …${esc(c.numero.slice(-4))}` : ''}</option>`).join('')
     : '<option value="">Primero agrega una cuenta en Ajustes → Bancos</option>';
   if (previo && cuentas.some((c) => c.id === previo)) sel.value = previo;
+  await actualizarCajaBanco();
   if (state.analisis) pintarAnalisis();
+}
+
+async function actualizarCajaBanco() {
+  const c = state.ajustes.cuentas.find((x) => x.id === $('#sel-cuenta').value);
+  const banco = c && state.catalogo.bancos.find((b) => b.codigo === c.banco);
+  const visible = Boolean(c && banco?.api?.movimientos && c.modo === 'api');
+  $('#desde-banco').hidden = !visible;
+  if (!visible) return;
+  try {
+    const r = await api(`/api/conciliacion/rango/${encodeURIComponent(c.id)}`);
+    $('#b-desde').value = r.desde;
+    $('#b-hasta').value = r.hasta;
+  } catch {
+    /* sin rango sugerido */
+  }
+}
+
+async function traerDelBanco(btn) {
+  const cuentaId = $('#sel-cuenta').value;
+  await conCarga(btn, async () => {
+    $('#resultado').innerHTML = '<div class="card"><span class="spinner"></span> Consultando movimientos al banco…</div>';
+    try {
+      state.analisis = await api('/api/conciliacion/banco', json('POST', { cuentaId, desde: $('#b-desde').value, hasta: $('#b-hasta').value }));
+      if (!state.analisis.dias.length) {
+        $('#resultado').innerHTML = '<div class="alert warn">El banco no reporta movimientos en ese rango.</div>';
+        return;
+      }
+      pintarAnalisis();
+    } catch (err) {
+      $('#resultado').innerHTML = `<div class="alert bad">❌ ${esc(err.message)}</div>`;
+    }
+  });
 }
 
 function initDrop() {
@@ -174,7 +232,7 @@ function pintarAnalisis() {
       <div class="summary">
         <div>
           <h3 style="margin:0">${esc(a.cuenta.alias)} · ${esc(a.archivo)}</h3>
-          <div class="muted small">${totalMov} movimientos en ${a.dias.length} día(s) · hoy es ${fecha(a.hoy)} · hoja "${esc(a.hoja)}", encabezado en fila ${a.filaEncabezado}</div>
+          <div class="muted small">${totalMov} movimientos en ${a.dias.length} día(s) · hoy es ${fecha(a.hoy)}${a.hoja === 'API' ? ' · traído de la API del banco' : ` · hoja "${esc(a.hoja)}", encabezado en fila ${a.filaEncabezado}`}</div>
           <div class="small" style="margin-top:6px">${cols}</div>
         </div>
         <div class="row gap">
@@ -355,6 +413,11 @@ async function cargarAjustes() {
   $('#r-modo').value = s.reglas.modoEtiqueta;
   $('#r-tz').value = s.empresa.zonaHoraria;
   $('#r-hoy').checked = s.reglas.excluirHoy !== false;
+  const au = s.automatizacion || {};
+  $('#a-activa').checked = Boolean(au.activa);
+  $('#a-hora').value = au.hora || '07:00';
+  $('#a-telegram').checked = au.enviarTelegram !== false;
+  $('#a-odoo').checked = Boolean(au.subirOdoo);
   pintarCuentas();
 }
 
@@ -389,6 +452,7 @@ function pintarCuentas() {
             <div class="row gap"><select data-k="diarioOdooId" class="grow">${opcionesDiario(c)}</select><button class="btn sm" data-diarios>↻ Cargar de Odoo</button></div>
           </label>
           <label class="field"><span>Modo de obtención</span><select data-k="modo">${Object.entries(state.catalogo.modos).map(([k, v]) => `<option value="${k}" ${k === c.modo ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>
+          ${bancos.find((b) => b.codigo === c.banco)?.api?.movimientos ? `<label class="switch field"><input type="checkbox" data-k="sincronizar" ${c.sincronizar !== false ? 'checked' : ''}/><span class="slider"></span><span>Incluir en el extracto automático</span></label>` : ''}
           <label class="field"><span>Largo de referencia (ceros a la izq.)</span><input type="number" min="0" max="30" data-k="referenciaLargo" value="${esc(c.referenciaLargo ?? 0)}" /></label>
         </div>
         <fieldset>
@@ -489,6 +553,7 @@ function recogerAjustes() {
   s.reglas.modoEtiqueta = $('#r-modo').value;
   s.reglas.excluirHoy = $('#r-hoy').checked;
   s.empresa.zonaHoraria = $('#r-tz').value.trim() || 'America/Caracas';
+  s.automatizacion = { activa: $('#a-activa').checked, hora: $('#a-hora').value || '07:00', enviarTelegram: $('#a-telegram').checked, subirOdoo: $('#a-odoo').checked };
   return s;
 }
 
@@ -548,5 +613,15 @@ function initAjustes() {
   initDrop();
   initAjustes();
   initVerificar();
+  $('#sel-cuenta').addEventListener('change', actualizarCajaBanco);
+  $('#btn-traer').addEventListener('click', (e) => traerDelBanco(e.currentTarget));
+  $('#btn-saldos').addEventListener('click', (e) => consultarSaldos(e.currentTarget));
+  $('#btn-sincronizar').addEventListener('click', (e) =>
+    conCarga(e.currentTarget, async () => {
+      const r = await api('/api/automatizacion/ejecutar', json('POST'));
+      r.forEach((x) => toast(`${x.ok ? '✅' : '❌'} ${esc(x.cuenta)}: ${esc(x.mensaje)}`, x.ok ? 'ok' : 'bad', 9000));
+      await cargarPanel();
+    }),
+  );
   router();
 })();

@@ -1,16 +1,18 @@
 // Conectores bancarios. Cada banco puede ofrecer:
 //   probar(cuenta)                              -> { ok, mensaje }
-//   consultarPago(cuenta, pago)                 -> verificación de un pago recibido (BDV)
-//   obtenerMovimientos(cuenta, desde, hasta)    -> movimientos para el extracto diario (pendiente: ningún banco lo ofrece aún)
+//   normalizarPago / consultarPago(cuenta, pago) -> verificación de un pago recibido (BDV, Banesco)
+//   obtenerMovimientos(cuenta, desde, hasta)    -> movimientos para el extracto diario (Banesco)
+//   consultarSaldo(cuenta)                      -> saldos (Banesco)
 //
-// Cuando llegue la documentación de otro banco (ej. Banesco), se agrega aquí sin tocar el resto del sistema.
+// Cuando llegue la documentación de otro banco (ej. Mercantil), se agrega aquí sin tocar el resto del sistema.
 
 import { bancoPorCodigo } from './catalogo.js';
 import * as bdv from './bdv.js';
+import * as banesco from './banesco.js';
 
 const implementaciones = {
   '0102': bdv, // API Conciliación BDV
-  // '0134': banesco,  ← cuando Banesco entregue su documentación
+  '0134': banesco, // Confirmación de Transacciones + Consulta de Cuenta
 };
 
 export function capacidades(codigo) {
@@ -18,6 +20,7 @@ export function capacidades(codigo) {
   return {
     verificarPago: Boolean(impl?.consultarPago),
     movimientos: Boolean(impl?.obtenerMovimientos),
+    saldo: Boolean(impl?.consultarSaldo),
   };
 }
 
@@ -38,6 +41,12 @@ export async function probarCuenta(cuenta) {
 
 export function conectorDe(cuenta) {
   return implementaciones[cuenta.banco] || null;
+}
+
+export async function consultarSaldo(cuenta) {
+  const impl = implementaciones[cuenta.banco];
+  if (!impl?.consultarSaldo) throw new Error(`${bancoPorCodigo(cuenta.banco)?.nombre || cuenta.banco} no ofrece consulta de saldo por API.`);
+  return impl.consultarSaldo(cuenta);
 }
 
 export async function obtenerMovimientos(cuenta, desde, hasta) {

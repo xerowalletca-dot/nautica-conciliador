@@ -29,6 +29,21 @@ const CAMPOS_BDV = [
   { key: 'baseUrl', label: 'URL (opcional, solo si el banco la cambia)', tipo: 'text', placeholder: 'por defecto la del manual' },
 ];
 
+// Banesco: SSO OAuth 2.0 + APIs "Consulta de Cuenta" (saldos) y "Confirmación de Transacciones" (movimientos y verificación).
+const CAMPOS_BANESCO = [
+  { key: 'ambiente', label: 'Ambiente', tipo: 'select', opciones: { produccion: 'Producción', calidad: 'Calidad / pruebas (QA)' } },
+  { key: 'clientId', label: 'Client ID', tipo: 'text' },
+  { key: 'clientSecret', label: 'Client Secret', tipo: 'secret' },
+  { key: 'rif', label: 'RIF de la empresa', tipo: 'text', placeholder: 'J-12345678-9' },
+  { key: 'usuarioBanesco', label: 'Usuario Banesco Online (empresa)', tipo: 'text' },
+  { key: 'password', label: 'Clave OAuth (solo si Banesco la exige)', tipo: 'secret' },
+  { key: 'tokenUrl', label: 'URL token SSO', tipo: 'text', placeholder: 'https://sso-…/protocol/openid-connect/token' },
+  { key: 'movimientosUrl', label: 'URL API Confirmación de Transacciones', tipo: 'text', placeholder: 'la entrega Banesco con las credenciales' },
+  { key: 'saldoUrl', label: 'URL API Consulta de Cuenta (saldos)', tipo: 'text', placeholder: 'https://…/customer/products' },
+  { key: 'scope', label: 'Scope (opcional)', tipo: 'text' },
+  { key: 'ipPublica', label: 'IP pública registrada en Banesco', tipo: 'text', placeholder: '181.x.x.x' },
+];
+
 export const BANCOS = [
   { codigo: '0134', nombre: 'Banesco', comisionPct: 0.3, refLargo: 11 },
   { codigo: '0105', nombre: 'Mercantil', comisionPct: 0.3, refLargo: 0 },
@@ -53,8 +68,10 @@ export const BANCOS = [
   { codigo: '0177', nombre: 'Banfanb', comisionPct: 0.3, refLargo: 0 },
 ].map((b) =>
   b.codigo === '0102'
-    ? { ...b, camposApi: CAMPOS_BDV, api: { verificarPago: true, movimientos: false, nota: 'API Conciliación BDV: verifica pagos móviles recibidos (no descarga el estado de cuenta).' } }
-    : { ...b, camposApi: CAMPOS_API, api: { verificarPago: false, movimientos: false, nota: 'Conector pendiente de la documentación del banco.' } },
+    ? { ...b, camposApi: CAMPOS_BDV, api: { verificarPago: true, movimientos: false, saldo: false, nota: 'API Conciliación BDV: verifica pagos móviles recibidos (no descarga el estado de cuenta).' } }
+    : b.codigo === '0134'
+      ? { ...b, camposApi: CAMPOS_BANESCO, api: { verificarPago: true, movimientos: true, saldo: true, nota: 'APIs Banesco: extracto diario automático (Confirmación de Transacciones), verificación de pagos y saldos. Requiere el número de cuenta de 20 dígitos y registrar la IP pública en Banesco.' } }
+      : { ...b, camposApi: CAMPOS_API, api: { verificarPago: false, movimientos: false, saldo: false, nota: 'Conector pendiente de la documentación del banco.' } },
 );
 
 export function bancoPorCodigo(codigo) {
@@ -74,7 +91,8 @@ export function nuevaCuenta(codigo = '0134') {
     diarioOdooNombre: '',
     modo: 'archivo',
     activa: true,
-    api: { baseUrl: '', clientId: '', clientSecret: '', apiKey: '', rif: '', ambiente: 'produccion', telefonoDestino: '' },
+    api: { baseUrl: '', clientId: '', clientSecret: '', apiKey: '', rif: '', ambiente: 'produccion', telefonoDestino: '', usuarioBanesco: '', password: '', tokenUrl: '', movimientosUrl: '', saldoUrl: '', scope: '', ipPublica: '' },
+    sincronizar: true, // si el banco tiene API de movimientos: traer el extracto solo cada mañana
     comision: {
       porcentaje: banco.comisionPct, // % que cobra el banco (Banesco Pago Móvil = 0,3 %)
       ratioMaximo: 1, // una línea "hermana" es comisión si pesa ≤ este % de la principal

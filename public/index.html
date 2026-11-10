@@ -39,6 +39,16 @@
       <div class="grid cards" id="status-cards"></div>
       <div class="grid two">
         <div class="card">
+          <div class="card-head"><h3>Saldos en línea</h3><button class="btn sm" id="btn-saldos">↻ Consultar</button></div>
+          <div id="panel-saldos"><div class="muted small">Disponible para cuentas Banesco con API.</div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Extracto automático</h3><button class="btn sm primary" id="btn-sincronizar">🔄 Ejecutar ahora</button></div>
+          <div id="panel-auto"></div>
+        </div>
+      </div>
+      <div class="grid two">
+        <div class="card">
           <h3>Cuentas bancarias</h3>
           <div id="panel-cuentas"></div>
         </div>
@@ -73,6 +83,15 @@
             <span>Cuenta bancaria</span>
             <select id="sel-cuenta"></select>
           </label>
+        </div>
+        <div id="desde-banco" class="api-box" hidden>
+          <div class="api-box-head"><b>⚡ Traer directo del banco</b> <span class="muted small">sin descargar archivos · por defecto lo pendiente hasta ayer</span></div>
+          <div class="row gap wrap">
+            <label class="field"><span>Desde</span><input type="date" id="b-desde" /></label>
+            <label class="field"><span>Hasta</span><input type="date" id="b-hasta" /></label>
+            <button class="btn primary" id="btn-traer">⇣ Traer movimientos</button>
+          </div>
+          <div class="muted small" style="margin-top:10px">— o sube el archivo del banco —</div>
         </div>
         <label class="drop" id="drop">
           <input type="file" id="file" accept=".xlsx,.csv,.txt" hidden />
@@ -205,6 +224,16 @@
 
       <!-- Reglas -->
       <div class="tab-pane" data-pane="reglas">
+        <div class="card">
+          <h3>Extracto automático cada mañana</h3>
+          <p class="muted small" style="margin:-6px 0 14px">Para cuentas con API de movimientos (Banesco) en modo "API del banco": trae los días cerrados pendientes, arma un Excel por día y lo manda a Telegram.</p>
+          <div class="grid form">
+            <label class="switch field"><input type="checkbox" id="a-activa" /><span class="slider"></span><span>Activado</span></label>
+            <label class="field"><span>Hora (Caracas)</span><input type="time" id="a-hora" /></label>
+            <label class="switch field"><input type="checkbox" id="a-telegram" /><span class="slider"></span><span>Enviar resumen y Excel a Telegram</span></label>
+            <label class="switch field"><input type="checkbox" id="a-odoo" /><span class="slider"></span><span>Subir a Odoo sin pedir confirmación</span></label>
+          </div>
+        </div>
         <div class="card">
           <h3>Reglas de conversión</h3>
           <div class="grid form">

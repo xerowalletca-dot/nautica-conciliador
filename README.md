@@ -36,6 +36,32 @@ Telegram (chats de administración o el chat de cobranza):
 /pago V12345678 04141234567 123456 10/11/2026 1250,00 0102 [CUENTA]
 ```
 
+## Banesco — APIs empresariales
+
+Con las APIs **Confirmación de Transacciones** y **Consulta de Cuenta**:
+
+| Función | Cómo se usa |
+|---|---|
+| **Extracto diario automático** | Cada mañana (hora configurable) trae del banco los días cerrados pendientes (el martes: sábado, domingo y lunes), arma un Excel por día con las comisiones marcadas y lo manda a Telegram con botón *Subir a Odoo* (o lo sube solo si se activa). También: botón **⇣ Traer movimientos** en *Conciliar extracto*. |
+| **Saldos en línea** | Tarjeta *Saldos en línea* del panel o `/saldo` en Telegram. |
+| **Verificar pagos** | *Verificar pago* o `/pago`: por referencia completa (Banesco→Banesco), últimos 6 dígitos + teléfono (pago móvil) o últimos 6 + cuenta (transferencia). |
+
+Configuración en **Ajustes → Bancos → Banesco** (modo **API del banco**): Client ID/Secret, RIF, usuario Banesco Online, URLs (token SSO, Confirmación de Transacciones, Consulta de Cuenta), **número de cuenta de 20 dígitos** e **IP pública** (Banesco exige registrarla). El extracto automático se enciende en **Ajustes → Reglas**.
+
+> Las descripciones que trae la API (`concept` + RIF/cédula de la contraparte) pueden diferir del texto del estado de cuenta descargado: revisar las reglas de conciliación automática de Odoo con los primeros extractos.
+
+## Consultas por Telegram
+
+```
+/saldo [cuenta]                       saldos en línea
+/movimientos [cuenta] [fecha] [hasta] movimientos (por defecto hoy)
+/extracto [cuenta] [fecha]            Excel para Odoo desde el banco + botón "Subir a Odoo"
+/sincronizar                          ejecuta ya el proceso de la mañana
+/pago CÉDULA TELÉFONO REF FECHA MONTO BANCO [cuenta]   verificar un pago (BDV o Banesco)
+```
+
+También entiende frases como *"saldo banesco"* o *"movimientos de ayer"*. Mandar un archivo al bot sigue funcionando para los bancos sin API.
+
 ## Instalación
 
 Requiere **Node.js 20 o superior**.
@@ -85,7 +111,7 @@ test/                       pruebas (npm test)
 
 ## Próximas fases
 
-- Conectores API de Banesco, Mercantil, etc. (cuando los bancos entreguen la documentación) y carga automática cada mañana.
+- Conectores API de Mercantil y otros bancos (cuando entreguen la documentación).
 - Órdenes de pago por Telegram con validación por **cédula/RIF** y comprobante al grupo de administración.
 - Lectura automática (OCR) de la foto del comprobante en el canal de cobranza.
 - Generador del TXT de Todoticket.

@@ -2,7 +2,6 @@
 // Además de preguntar al banco, bloquea comprobantes REUTILIZADOS: un mismo pago solo se acepta una vez.
 import { loadSettings, loadHistory, addHistory } from '../lib/store.js';
 import { conectorDe } from '../bancos/conectores.js';
-import { armarSolicitud } from '../bancos/bdv.js';
 import { bancoPorCodigo } from '../bancos/catalogo.js';
 
 export function cuentasVerificables(settings = loadSettings()) {
@@ -11,7 +10,7 @@ export function cuentasVerificables(settings = loadSettings()) {
 
 function elegirCuenta(settings, cuentaId) {
   const lista = cuentasVerificables(settings);
-  if (!lista.length) throw new Error('No hay cuentas con API de verificación (configura una cuenta del Banco de Venezuela con su API Key).');
+  if (!lista.length) throw new Error('No hay cuentas con API de verificación (configura una cuenta BDV o Banesco con sus credenciales).');
   if (!cuentaId) {
     if (lista.length === 1) return lista[0];
     throw new Error(`Indica la cuenta: ${lista.map((c) => c.alias).join(', ')}.`);
@@ -22,7 +21,8 @@ function elegirCuenta(settings, cuentaId) {
   return c;
 }
 
-const claveDePago = (s) => `${s.bancoOrigen}|${s.referencia.replace(/^0+/, '')}|${s.fechaPago}`;
+// Clave del comprobante: banco + últimos 6 dígitos de la referencia + fecha (así "0001234567" y "234567" son el mismo pago).
+const claveDePago = (s) => `${s.bancoOrigen}|${s.referencia.replace(/\D/g, '').slice(-6)}|${s.fechaPago}`;
 
 /** Busca si este pago ya fue aceptado antes (comprobante reutilizado). */
 export function pagoYaAceptado(cuentaId, solicitud, historial = loadHistory()) {
@@ -37,7 +37,7 @@ export async function verificarPago({ cuentaId, pago, usuario = 'panel', canal =
   const settings = loadSettings();
   const cuenta = elegirCuenta(settings, cuentaId);
   const conector = conectorDe(cuenta);
-  const solicitud = armarSolicitud(pago, cuenta); // valida y normaliza antes de llamar al banco
+  const solicitud = conector.normalizarPago(pago, cuenta); // valida y normaliza antes de llamar al banco
   const base = { tipo: 'verificacion', cuentaId: cuenta.id, cuenta: cuenta.alias, clave: claveDePago(solicitud), ...resumen(solicitud), usuario, canal };
 
   const previo = pagoYaAceptado(cuenta.id, solicitud);
@@ -83,8 +83,10 @@ export function historialVerificaciones(limite = 200) {
 export function leerComandoPago(texto) {
   const partes = String(texto).trim().split(/\s+/).slice(1);
   if (partes.length < 6) {
-    throw new Error('Formato: /pago CÉDULA TELÉFONO REFERENCIA FECHA MONTO BANCO [CUENTA]\nEj: /pago V12345678 04141234567 123456 10/11/2026 1250,00 0102');
+    throw new Error('Formato: /pago CÉDULA TELÉFONO REFERENCIA FECHA MONTO BANCO [CUENTA]\nEj: /pago V12345678 04141234567 123456 10/11/2026 1250,00 0102\n(En Banesco puedes poner "-" en cédula o teléfono si no los tienes.)');
   }
-  const [cedulaPagador, telefonoPagador, referencia, fechaPago, importe, bancoOrigen, cuenta] = partes;
+  const [ced, tel, referencia, fechaPago, importe, bancoOrigen, cuenta] = partes;
+  const cedulaPagador = ced === '-' ? '' : ced;
+  const telefonoPagador = tel === '-' ? '' : tel;
   return { pago: { cedulaPagador, telefonoPagador, referencia, fechaPago, importe, bancoOrigen }, cuentaId: cuenta || '' };
 }

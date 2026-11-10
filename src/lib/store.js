@@ -55,6 +55,12 @@ export function defaultSettings() {
       // 'vacia'  = Etiqueta vacía salvo comisiones (como dice el prompt)
       modoEtiqueta: 'copiar',
     },
+    automatizacion: {
+      activa: false, // trae el extracto de los bancos con API cada mañana
+      hora: '07:00', // hora de Caracas
+      enviarTelegram: true, // manda resumen + Excel a administración
+      subirOdoo: false, // si es true, sube a Odoo sin esperar confirmación
+    },
     cuentas: [],
   };
 }
