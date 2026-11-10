@@ -92,17 +92,34 @@ function configuracion(cuenta) {
   const api = cuenta?.api || {};
   const ambiente = api.ambiente === 'calidad' ? 'calidad' : 'produccion';
   const url = api.baseUrl?.trim() || ENDPOINTS[ambiente];
-  const apiKey = api.apiKey || (ambiente === 'calidad' ? API_KEY_CALIDAD : '');
-  if (!apiKey) throw new BdvError(`La cuenta ${cuenta?.alias || ''} no tiene API Key del BDV (Ajustes → Bancos).`);
-  return { url, apiKey, ambiente };
+  const claves = [api.apiKey, api.apiKey2].map((k) => String(k || '').trim()).filter(Boolean);
+  if (!claves.length && ambiente === 'calidad') claves.push(API_KEY_CALIDAD);
+  if (!claves.length) throw new BdvError(`La cuenta ${cuenta?.alias || ''} no tiene API Key del BDV (Ajustes → Bancos).`);
+  return { url, claves, ambiente };
 }
 
 /**
  * Llama al BDV. Devuelve { confirmado, codigo, mensaje, montoBanco, solicitud, ambiente }.
  * Lanza BdvError solo por problemas de conexión, credenciales o datos de entrada.
  */
-export async function consultarPago(cuenta, pago, { fetchImpl = fetch, timeoutMs = 25000 } = {}) {
-  const { url, apiKey, ambiente } = configuracion(cuenta);
+export async function consultarPago(cuenta, pago, opciones = {}) {
+  const { claves } = configuracion(cuenta);
+  // Si la empresa tiene dos API Keys, se usa la primera y, si el BDV la rechaza, la segunda.
+  let ultimoError;
+  for (let i = 0; i < claves.length; i++) {
+    try {
+      const r = await consultarConClave(cuenta, pago, claves[i], opciones);
+      return { ...r, claveUsada: i + 1 };
+    } catch (err) {
+      if (err.tipo !== 'credenciales') throw err;
+      ultimoError = err;
+    }
+  }
+  throw ultimoError;
+}
+
+async function consultarConClave(cuenta, pago, apiKey, { fetchImpl = fetch, timeoutMs = 25000 } = {}) {
+  const { url, ambiente } = configuracion(cuenta);
   const solicitud = armarSolicitud(pago, cuenta);
   let res;
   try {
@@ -166,7 +183,7 @@ export async function probar(cuenta, opciones = {}) {
     const avisoTel = telefonoDestino ? '' : ' Falta configurar el teléfono Pago Móvil de la empresa.';
     return {
       ok: !avisoTel,
-      mensaje: `BDV (${r.ambiente}): conexión y API Key aceptadas (respuesta ${r.codigo}: ${r.mensaje}).${avisoTel}`,
+      mensaje: `BDV (${r.ambiente}): conexión y API Key ${r.claveUsada || 1} aceptadas (respuesta ${r.codigo}: ${r.mensaje}).${avisoTel}`,
     };
   } catch (err) {
     return { ok: false, mensaje: `BDV: ${err.message}` };

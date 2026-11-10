@@ -91,10 +91,25 @@ test('errores: 400 de contrato, clave rechazada, sin API Key', async () => {
 test('probar(): un 1010 con datos ficticios significa que la clave fue aceptada', async () => {
   const r = await bdv.probar(cuenta, bancoFalso(NO_EXISTE));
   assert.equal(r.ok, true);
-  assert.match(r.mensaje, /API Key aceptadas/);
+  assert.match(r.mensaje, /API Key 1 aceptadas/);
   const sinTel = await bdv.probar({ ...cuenta, api: { ...cuenta.api, telefonoDestino: '' } }, bancoFalso(NO_EXISTE));
   assert.equal(sinTel.ok, false);
   assert.match(sinTel.mensaje, /teléfono Pago Móvil/);
+});
+
+test('dos API Keys de la misma empresa: si el BDV rechaza la primera, usa la segunda', async () => {
+  const usadas = [];
+  const fetchImpl = async (url, opts) => {
+    usadas.push(opts.headers['X-API-Key']);
+    if (opts.headers['X-API-Key'] === 'CLAVE-VIEJA') return { status: 401, ok: false, json: async () => ({}) };
+    return { status: 200, ok: true, json: async () => OK_1000(JSON.parse(opts.body)) };
+  };
+  const dos = { ...cuenta, api: { ...cuenta.api, apiKey: 'CLAVE-VIEJA', apiKey2: 'CLAVE-BUENA' } };
+  const r = await bdv.consultarPago(dos, pago, { fetchImpl });
+  assert.equal(r.confirmado, true);
+  assert.equal(r.claveUsada, 2);
+  assert.deepEqual(usadas, ['CLAVE-VIEJA', 'CLAVE-BUENA']);
+  await assert.rejects(bdv.consultarPago({ ...dos, api: { ...dos.api, apiKey2: 'CLAVE-VIEJA' } }, pago, { fetchImpl }), /rechazó la API Key/);
 });
 
 test('verificador: confirma una vez y bloquea el comprobante reutilizado', async () => {

@@ -582,6 +582,25 @@ function initAjustes() {
     }),
   );
   $('#btn-guardar').addEventListener('click', (e) => conCarga(e.currentTarget, guardar));
+  $$('[data-conectar]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const codigo = b.dataset.conectar;
+      const existente = state.ajustes.cuentas.findIndex((c) => c.banco === codigo);
+      if (existente < 0) {
+        const nueva = structuredClone(state.catalogo.cuentaNueva);
+        nueva.id = `cta_${Math.random().toString(36).slice(2, 10)}`;
+        nueva.banco = codigo;
+        nueva.alias = codigo === '0102' ? 'BDV NAUTICA' : 'BANESCO';
+        nueva.modo = codigo === '0134' ? 'api' : 'archivo';
+        state.ajustes.cuentas.unshift(nueva);
+        pintarCuentas();
+      }
+      const el = $$('#lista-cuentas .cuenta').find((x) => state.ajustes.cuentas[Number(x.dataset.i)]?.banco === codigo);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el?.querySelector('fieldset:last-of-type input')?.focus();
+      toast(existente < 0 ? 'Cuenta creada: llena las claves y pulsa "Guardar cambios".' : 'Esta es la cuenta: llena las claves en "Credenciales API del banco".', 'warn', 7000);
+    }),
+  );
   $('#btn-add-cuenta').addEventListener('click', () => {
     const nueva = structuredClone(state.catalogo.cuentaNueva);
     nueva.id = `cta_${Math.random().toString(36).slice(2, 10)}`;

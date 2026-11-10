@@ -192,7 +192,11 @@
       <div class="tab-pane" data-pane="bancos">
         <div class="card-head outer">
           <p class="muted">Cada cuenta se vincula con su diario de banco en Odoo. Las credenciales API se activan cuando el banco las entregue.</p>
-          <button class="btn" id="btn-add-cuenta">＋ Agregar cuenta</button>
+          <div class="row gap wrap">
+            <button class="btn" data-conectar="0102">🏦 Conectar Banco de Venezuela (API)</button>
+            <button class="btn" data-conectar="0134">🏦 Conectar Banesco (API)</button>
+            <button class="btn" id="btn-add-cuenta">＋ Otra cuenta</button>
+          </div>
         </div>
         <div id="lista-cuentas"></div>
       </div>

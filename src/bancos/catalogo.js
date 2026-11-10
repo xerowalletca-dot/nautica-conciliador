@@ -23,7 +23,8 @@ const CAMPOS_BDV = [
     tipo: 'select',
     opciones: { produccion: 'Producción (bdvconciliacion.banvenez.com)', calidad: 'Calidad / pruebas del banco' },
   },
-  { key: 'apiKey', label: 'API Key (BDVenLínea Empresas)', tipo: 'secret' },
+  { key: 'apiKey', label: 'API Key de conciliación (BDVenLínea Empresas)', tipo: 'secret' },
+  { key: 'apiKey2', label: 'API Key de conciliación 2 (opcional)', tipo: 'secret' },
   { key: 'telefonoDestino', label: 'Teléfono Pago Móvil de la empresa', tipo: 'text', placeholder: '04121234567' },
   { key: 'rif', label: 'RIF de la empresa', tipo: 'text', placeholder: 'J-00000000-0' },
   { key: 'baseUrl', label: 'URL (opcional, solo si el banco la cambia)', tipo: 'text', placeholder: 'por defecto la del manual' },
@@ -91,7 +92,7 @@ export function nuevaCuenta(codigo = '0134') {
     diarioOdooNombre: '',
     modo: 'archivo',
     activa: true,
-    api: { baseUrl: '', clientId: '', clientSecret: '', apiKey: '', rif: '', ambiente: 'produccion', telefonoDestino: '', usuarioBanesco: '', password: '', tokenUrl: '', movimientosUrl: '', saldoUrl: '', scope: '', ipPublica: '' },
+    api: { baseUrl: '', clientId: '', clientSecret: '', apiKey: '', apiKey2: '', rif: '', ambiente: 'produccion', telefonoDestino: '', usuarioBanesco: '', password: '', tokenUrl: '', movimientosUrl: '', saldoUrl: '', scope: '', ipPublica: '' },
     sincronizar: true, // si el banco tiene API de movimientos: traer el extracto solo cada mañana
     comision: {
       porcentaje: banco.comisionPct, // % que cobra el banco (Banesco Pago Móvil = 0,3 %)

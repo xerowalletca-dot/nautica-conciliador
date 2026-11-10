@@ -227,6 +227,19 @@ app.get('/api/estado', ruta((req, res) => {
 
 app.get('/api/historial', ruta((req, res) => res.json(loadHistory().filter((h) => h.tipo === 'odoo'))));
 
+// Primera vez: deja creadas las cuentas BDV y Banesco para que sus campos de API estén a la vista.
+(function crearCuentasBase() {
+  const s = loadSettings();
+  if (s.cuentasBaseCreadas) return;
+  const base = [
+    { ...nuevaCuenta('0102'), id: 'cta_bdv', alias: 'BDV NAUTICA' },
+    { ...nuevaCuenta('0134'), id: 'cta_banesco', alias: 'BANESCO', modo: 'api' },
+  ];
+  for (const c of base) if (!s.cuentas.some((x) => x.banco === c.banco)) s.cuentas.push(c);
+  s.cuentasBaseCreadas = true;
+  saveSettings(s);
+})();
+
 iniciarProgramador();
 
 app.listen(PORT, HOST, async () => {

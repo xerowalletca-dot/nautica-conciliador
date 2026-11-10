@@ -10,7 +10,7 @@ const HISTORY_FILE = path.join(DATA_DIR, 'historial.json');
 const SECRET_FILE = path.join(DATA_DIR, '.secret');
 
 // Campos considerados secretos en cualquier nivel del objeto de ajustes.
-export const SECRET_KEYS = ['secret', 'token', 'clientSecret', 'apiKey', 'password'];
+export const SECRET_KEYS = ['secret', 'token', 'clientSecret', 'apiKey', 'apiKey2', 'password'];
 export const CLEAR = '__BORRAR__';
 
 function ensureDir() {
@@ -62,6 +62,7 @@ export function defaultSettings() {
       subirOdoo: false, // si es true, sube a Odoo sin esperar confirmación
     },
     cuentas: [],
+    cuentasBaseCreadas: false,
   };
 }
 
