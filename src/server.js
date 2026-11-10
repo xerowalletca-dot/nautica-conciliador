@@ -7,6 +7,7 @@ import { OdooClient, guessDbFromUrl, normalizeOdooUrl } from './lib/odoo.js';
 import { TelegramClient } from './lib/telegram.js';
 import { BANCOS, MODOS, nuevaCuenta } from './bancos/catalogo.js';
 import { DATOS_MANUAL_QA } from './bancos/banesco.js';
+import { DATOS_MANUAL_CALIDAD } from './bancos/bdv.js';
 import { probarCuenta, capacidades, consultarSaldo } from './bancos/conectores.js';
 import { ejecutarSincronizacion, iniciarProgramador, estadoAutomatizacion } from './automatizacion/diaria.js';
 import { verificarPago, cuentasVerificables, historialVerificaciones } from './cobranza/verificador.js';
@@ -65,7 +66,21 @@ app.put('/api/ajustes', ruta(async (req, res) => {
   res.json(maskSettings(nuevo));
 }));
 
-app.get('/api/catalogo', (req, res) => res.json({ bancos: BANCOS, modos: MODOS, cuentaNueva: nuevaCuenta(), presets: { '0134': DATOS_MANUAL_QA } }));
+// Agrega o actualiza UNA cuenta sin tocar las demás (útil para cargar claves desde la terminal del propio equipo).
+app.post('/api/cuentas', ruta(async (req, res) => {
+  const entrada = req.body || {};
+  if (!entrada.banco) throw new Error('Falta el código del banco (ej. "0102").');
+  const s = loadSettings();
+  const id = entrada.id || `cta_${crypto.randomBytes(4).toString('hex')}`;
+  const previa = s.cuentas.find((c) => c.id === id);
+  const base = previa || { ...nuevaCuenta(entrada.banco), id };
+  const unida = mergeIncoming({ ...base, ...entrada, id, api: { ...base.api, ...(entrada.api || {}) } }, previa || base);
+  s.cuentas = previa ? s.cuentas.map((c) => (c.id === id ? unida : c)) : [...s.cuentas, unida];
+  saveSettings(s);
+  res.json(maskSettings(unida));
+}));
+
+app.get('/api/catalogo', (req, res) => res.json({ bancos: BANCOS, modos: MODOS, cuentaNueva: nuevaCuenta(), presets: { '0134': DATOS_MANUAL_QA, '0102': DATOS_MANUAL_CALIDAD } }));
 
 // ---------------- Odoo ----------------
 

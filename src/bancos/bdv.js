@@ -16,6 +16,14 @@ export const ENDPOINTS = {
 // Clave pública del ambiente de calidad, publicada en el propio manual del BDV (no sirve en producción).
 export const API_KEY_CALIDAD = '96R7T1T5J2134T5YFC2GF15SDFG4BD1Z';
 
+// Datos del "ambiente de calidad" tal como aparecen en el manual MDU-006 (págs. 3 y 4), para probar la conexión.
+export const DATOS_MANUAL_CALIDAD = {
+  ambiente: 'calidad',
+  apiKey: API_KEY_CALIDAD,
+  telefonoDestino: '04127141363',
+  baseUrl: '',
+};
+
 export class BdvError extends Error {
   constructor(message, extra = {}) {
     super(message);

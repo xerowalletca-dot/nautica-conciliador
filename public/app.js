@@ -466,7 +466,7 @@ function pintarCuentas() {
         <fieldset ${c.modo === 'api' || bancos.find((b) => b.codigo === c.banco)?.api?.verificarPago ? '' : 'style="opacity:.6"'}>
           <legend>Credenciales API del banco</legend>
           <p class="api-nota">${esc(bancos.find((b) => b.codigo === c.banco)?.api?.nota || '')}</p>
-          ${state.catalogo.presets?.[c.banco] ? `<p><button class="btn sm" data-preset="${i}">📄 Rellenar con los datos de prueba del manual (QA)</button></p>` : ''}
+          ${state.catalogo.presets?.[c.banco] ? `<p><button class="btn sm" data-preset="${i}">📄 Rellenar con los datos de prueba del manual</button></p>` : ''}
           <div class="grid form">
             ${(bancos.find((b) => b.codigo === c.banco)?.camposApi || [])
               .map((f) => {
@@ -502,9 +502,9 @@ function pintarCuentas() {
       e.preventDefault();
       const c = cuentas[Number(b.dataset.preset)];
       c.api = { ...(c.api || {}), ...state.catalogo.presets[c.banco] };
-      c.modo = 'api';
+      if (state.catalogo.bancos.find((x) => x.codigo === c.banco)?.api?.movimientos) c.modo = 'api';
       pintarCuentas();
-      toast('Datos del manual cargados (ambiente de Calidad). Pulsa "Guardar cambios" y luego ⚡ Probar.', 'warn', 8000);
+      toast('Datos de prueba del manual cargados. Pulsa "Guardar cambios" y luego ⚡ Probar.', 'warn', 8000);
     }),
   );
   $$('[data-borrar]').forEach((b) =>
